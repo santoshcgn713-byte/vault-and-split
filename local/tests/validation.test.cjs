@@ -1,0 +1,10 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');const M=require('../dist/money.js');const source=fs.readFileSync(require.resolve('../dist/app.js'),'utf8');const start=source.indexOf('function safeId('),end=source.indexOf('\nfunction restore()',start);const validate=vm.runInNewContext(source.slice(start,end)+';validateBackup',{Money:M});
+function backup(){return {format:'orbit-local',version:1,state:{version:1,name:'Santosh',theme:'system',collections:[],groups:[{id:'g',name:'Home',currency:'CAD',me:'a',members:[{id:'a',name:'Santosh'},{id:'b',name:'Friend'}],expenses:[{id:'e',description:'Dinner',amount:1000,date:'2026-10-18',payer:'a',allocations:{a:500,b:500}}],repayments:[]}]},documents:[]};}
+test('valid migration format is accepted',()=>{const b=backup();assert.equal(validate(b),b);});
+test('foreign member allocation is rejected',()=>{const b=backup();b.state.groups[0].expenses[0].allocations={outsider:1000};assert.throws(()=>validate(b));});
+test('duplicate expenses are rejected',()=>{const b=backup();b.state.groups[0].expenses.push({...b.state.groups[0].expenses[0]});assert.throws(()=>validate(b));});
+test('invalid currency and repayment date are rejected',()=>{const b=backup();b.state.groups[0].currency='ZZZ';assert.throws(()=>validate(b));b.state.groups[0].currency='CAD';b.state.groups[0].repayments.push({id:'r',date:'bad',from:'b',to:'a',amount:100});assert.throws(()=>validate(b));});
+test('malformed format and excessive vault reject',()=>{assert.throws(()=>validate({}));const b=backup();b.documents=[{size:80000001}];assert.throws(()=>validate(b));});
+test('unbalanced and fractional cents reject',()=>{const b=backup();b.state.groups[0].expenses[0].allocations.a=501;assert.throws(()=>validate(b));b.state.groups[0].expenses[0].allocations={a:500.5,b:499.5};assert.throws(()=>validate(b));});
+
+test('attribute injection through imported identifiers is rejected',()=>{const b=backup();b.state.groups[0].id='g\" onclick=alert(1)';assert.throws(()=>validate(b));});
